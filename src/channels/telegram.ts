@@ -4,10 +4,11 @@ import type { IncomingMessage, OutgoingMessage, MediaAttachment } from "../types
 import { log } from "../types.js";
 import { config } from "../config.js";
 
-export function createTelegramAdapter(): ChannelAdapter & { botUserId: string } {
+export function createTelegramAdapter(): ChannelAdapter & { botUserId: string; botUsername: string } {
   const bot = new Bot(config.telegram.botToken());
   let messageHandler: ((msg: IncomingMessage) => Promise<void>) | null = null;
   let botUserId = "";
+  let botUsername = "";
 
   return {
     name: "telegram",
@@ -16,15 +17,20 @@ export function createTelegramAdapter(): ChannelAdapter & { botUserId: string } 
       return botUserId;
     },
 
+    get botUsername() {
+      return botUsername;
+    },
+
     async start() {
       const me = await bot.api.getMe();
       botUserId = String(me.id);
+      botUsername = me.username ?? "";
       log("info", "Telegram bot started", { username: me.username, id: me.id });
 
       bot.on("message", async (ctx: Context) => {
         if (!messageHandler || !ctx.message) return;
 
-        const msg = normalize(ctx);
+        const msg = normalize(ctx, botUsername, botUserId);
         if (msg) {
           try {
             await messageHandler(msg);
@@ -85,12 +91,35 @@ export function createTelegramAdapter(): ChannelAdapter & { botUserId: string } 
   };
 }
 
-function normalize(ctx: Context): IncomingMessage | null {
+function normalize(ctx: Context, botUsername: string, botUserId: string): IncomingMessage | null {
   const msg = ctx.message;
   if (!msg) return null;
 
-  const text = msg.text ?? msg.caption ?? "";
+  let text = msg.text ?? msg.caption ?? "";
   if (!text && !msg.photo && !msg.document) return null;
+
+  const isDM = msg.chat.type === "private";
+  const isCommand = text.startsWith("/");
+  const isReplyToBot =
+    msg.reply_to_message?.from?.id === Number(botUserId);
+
+  // Check @mention in entities
+  const hasMention =
+    botUsername &&
+    msg.entities?.some(
+      (e) =>
+        e.type === "mention" &&
+        text
+          .slice(e.offset, e.offset + e.length)
+          .toLowerCase() === `@${botUsername.toLowerCase()}`,
+    );
+
+  // Strip @botUsername from text for cleaner processing
+  if (hasMention && botUsername) {
+    text = text.replace(new RegExp(`@${botUsername}\\b`, "gi"), "").trim();
+  }
+
+  const isDirected = isDM || isCommand || isReplyToBot || !!hasMention;
 
   const media: MediaAttachment[] = [];
 
@@ -124,5 +153,6 @@ function normalize(ctx: Context): IncomingMessage | null {
     media: media.length > 0 ? media : undefined,
     raw: msg,
     timestamp: msg.date * 1000,
+    isDirected,
   };
 }

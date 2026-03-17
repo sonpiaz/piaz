@@ -2,6 +2,7 @@ import type { LLMMessage, LLMContentBlock } from "./providers/types.js";
 import type { SessionData } from "./context-engine.js";
 import type { ToolRegistry } from "./tools/types.js";
 import type { ChannelAdapter } from "./channels/types.js";
+import type { SkillRegistry } from "./skills/registry.js";
 import type { IncomingMessage, OrgContext, SessionKey } from "./types.js";
 import { log } from "./types.js";
 import { getProvider } from "./providers/registry.js";
@@ -18,10 +19,11 @@ interface WorkerInput {
   orgContext: OrgContext;
   toolRegistry: ToolRegistry;
   channel: ChannelAdapter;
+  skillRegistry?: SkillRegistry;
 }
 
 export async function runWorker(input: WorkerInput): Promise<void> {
-  const { message, sessionKey, orgContext, toolRegistry, channel } = input;
+  const { message, sessionKey, orgContext, toolRegistry, channel, skillRegistry } = input;
   const contextEngine = createContextEngine();
 
   // Load session
@@ -31,7 +33,7 @@ export async function runWorker(input: WorkerInput): Promise<void> {
   session = contextEngine.ingest(session, message);
 
   // Build system prompt
-  const systemPrompt = await buildSystemPrompt(orgContext, toolRegistry);
+  const systemPrompt = await buildSystemPrompt(orgContext, toolRegistry, skillRegistry);
 
   // Get provider
   const agent = orgContext; // simplified
@@ -171,6 +173,7 @@ export async function runWorker(input: WorkerInput): Promise<void> {
 async function buildSystemPrompt(
   org: OrgContext,
   tools: ToolRegistry,
+  skills?: SkillRegistry,
 ): Promise<string> {
   const parts: string[] = [];
 
@@ -202,6 +205,14 @@ async function buildSystemPrompt(
   if (summaries.length > 0) {
     const list = summaries.map((s) => `- ${s.name}: ${s.description}`).join("\n");
     parts.push(`<available_tools>\n${list}\n</available_tools>`);
+  }
+
+  // Skill summaries (lazy — only names + descriptions in prompt)
+  if (skills) {
+    const skillList = skills.summaries();
+    if (skillList) {
+      parts.push(`<available_skills>\n${skillList}\n</available_skills>`);
+    }
   }
 
   return parts.join("\n\n");

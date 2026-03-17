@@ -1,6 +1,7 @@
 import type { IncomingMessage } from "../types.js";
 import type { ChannelAdapter } from "../channels/types.js";
 import type { ToolRegistry } from "../tools/types.js";
+import type { SkillRegistry } from "../skills/registry.js";
 import { log } from "../types.js";
 import { route } from "./router.js";
 import { spawnWorker } from "./worker-spawner.js";
@@ -8,11 +9,12 @@ import { spawnWorker } from "./worker-spawner.js";
 export interface GatewayOptions {
   channel: ChannelAdapter;
   toolRegistry: ToolRegistry;
+  skillRegistry?: SkillRegistry;
   botUserId?: string;
 }
 
 export function createGateway(opts: GatewayOptions) {
-  const { channel, toolRegistry, botUserId } = opts;
+  const { channel, toolRegistry, skillRegistry, botUserId } = opts;
 
   async function handleMessage(msg: IncomingMessage): Promise<void> {
     // Echo guard: ignore bot's own messages
@@ -20,6 +22,9 @@ export function createGateway(opts: GatewayOptions) {
 
     // Skip empty messages
     if (!msg.text?.trim()) return;
+
+    // In groups, only respond to directed messages (@mention, reply, /command)
+    if (!msg.isDirected) return;
 
     log("info", "Incoming message", {
       chatId: msg.chatId,
@@ -38,6 +43,7 @@ export function createGateway(opts: GatewayOptions) {
       result.orgContext,
       toolRegistry,
       channel,
+      skillRegistry,
     );
   }
 

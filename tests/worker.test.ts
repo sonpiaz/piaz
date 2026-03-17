@@ -32,6 +32,7 @@ describe("ContextEngine", () => {
       text: "Hello world",
       raw: {},
       timestamp: Date.now(),
+      isDirected: true,
     };
 
     const result = engine.ingest(emptySession, msg);

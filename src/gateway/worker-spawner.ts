@@ -1,6 +1,7 @@
 import type { IncomingMessage, OrgContext, SessionKey } from "../types.js";
 import type { ToolRegistry } from "../tools/types.js";
 import type { ChannelAdapter } from "../channels/types.js";
+import type { SkillRegistry } from "../skills/registry.js";
 import { formatSessionKey, log } from "../types.js";
 import { runWorker } from "../worker.js";
 
@@ -16,12 +17,13 @@ export async function spawnWorker(
   orgContext: OrgContext,
   toolRegistry: ToolRegistry,
   channel: ChannelAdapter,
+  skillRegistry?: SkillRegistry,
 ): Promise<void> {
   const key = formatSessionKey(sessionKey);
 
   const task = async () => {
     try {
-      await runWorker({ message, sessionKey, orgContext, toolRegistry, channel });
+      await runWorker({ message, sessionKey, orgContext, toolRegistry, channel, skillRegistry });
     } catch (e) {
       log("error", "Worker failed", { key, error: (e as Error).message });
       try {

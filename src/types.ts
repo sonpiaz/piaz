@@ -9,6 +9,8 @@ export interface IncomingMessage {
   media?: MediaAttachment[];
   raw: unknown;
   timestamp: number;
+  /** True if message is a DM, @mention, reply to bot, or /command */
+  isDirected: boolean;
 }
 
 export interface MediaAttachment {

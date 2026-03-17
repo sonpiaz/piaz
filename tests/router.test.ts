@@ -37,6 +37,7 @@ function makeMessage(overrides?: Partial<IncomingMessage>): IncomingMessage {
     text: "Hello " + Math.random(),
     raw: {},
     timestamp: Date.now(),
+    isDirected: true,
     ...overrides,
   };
 }

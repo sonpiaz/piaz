@@ -1,17 +1,24 @@
 import { createTelegramAdapter } from "./channels/telegram.js";
 import { createGateway } from "./gateway/index.js";
 import { createToolRegistry, registerBuiltinTools } from "./tools/registry.js";
+import { createSkillRegistry } from "./skills/registry.js";
 import { registerProvider } from "./providers/registry.js";
 import { createAnthropicProvider } from "./providers/anthropic.js";
 import { createOpenAIProvider } from "./providers/openai.js";
 import { createOllamaProvider } from "./providers/ollama.js";
-import { handleStartCommand, handleGroupAdd } from "./onboarding.js";
+import { handleStartCommand } from "./onboarding.js";
+import { handleCommand } from "./commands.js";
 import { startDrainLoop, stopDrainLoop, drainBuffer } from "./sessions/local-buffer.js";
+import { runMigrations } from "./db/migrate.js";
 import { config } from "./config.js";
 import { log } from "./types.js";
+import { join } from "node:path";
 
 async function main() {
   log("info", "Starting Piaz v0.1", { env: config.app.nodeEnv() });
+
+  // Run database migrations
+  await runMigrations();
 
   // Register LLM providers
   registerProvider(createAnthropicProvider());
@@ -26,21 +33,32 @@ async function main() {
   const toolRegistry = createToolRegistry();
   registerBuiltinTools(toolRegistry);
 
+  // Scan skills from 3 sources (org skills loaded at runtime, these are defaults)
+  const skillRegistry = createSkillRegistry();
+  await skillRegistry.init([
+    join(process.cwd(), "workspace", "skills"),
+    join(process.cwd(), "skills"),
+  ]);
+
   // Set up Telegram
   const telegram = createTelegramAdapter();
 
-  // Handle /start command for onboarding
+  // Intercept commands before gateway
   const originalOnMessage = telegram.onMessage.bind(telegram);
-  let gatewayHandler: ((msg: import("./types.js").IncomingMessage) => Promise<void>) | null = null;
-
   telegram.onMessage = (handler) => {
-    gatewayHandler = handler;
     originalOnMessage(async (msg) => {
-      // /start command
+      // /start → onboarding
       if (msg.text.trim() === "/start") {
         await handleStartCommand(msg.chatId, msg.userId, msg.userName, telegram);
         return;
       }
+
+      // Built-in commands (/help, /settings, /status)
+      if (msg.text.startsWith("/")) {
+        const handled = await handleCommand(msg, telegram);
+        if (handled) return;
+      }
+
       await handler(msg);
     });
   };
@@ -49,6 +67,7 @@ async function main() {
   const gateway = createGateway({
     channel: telegram,
     toolRegistry,
+    skillRegistry,
     botUserId: telegram.botUserId,
   });
 
