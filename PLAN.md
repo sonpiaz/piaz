@@ -1,6 +1,22 @@
 # Piaz v0.1 — Engineering Plan
 
 *Informed by deep analysis of OpenClaw source code + Viktor product architecture*
+*Eng-reviewed: 2026-03-17*
+
+---
+
+## Resolved Architecture Decisions
+
+| # | Decision | Choice | Rationale |
+|---|----------|--------|-----------|
+| 1 | Fork strategy | **Build from scratch, OpenClaw as reference** | Cleanest foundation, no legacy debt |
+| 2 | Multi-tenant | **True multi-tenant from Phase 0** | PostgreSQL + org model + per-org workspace from day 1 |
+| 3 | LLM providers | **Full provider-plugin from start** | Anthropic + OpenAI + Ollama, customers may use own keys |
+| 4 | Memory/knowledge | **PostgreSQL + pgvector** | Hybrid BM25 + vector, multi-tenant ready, Neon supports it |
+| 5 | Session storage | **JSONL on R2 + metadata in Postgres** | Transcripts = append-only blobs, metadata = queryable |
+| 6 | Tool system | **TS module registry + lazy loading** | Type-safe, testable, Viktor's lazy pattern |
+| 7 | Test coverage | **8 test files covering 24/31 critical paths** | Balance of coverage vs speed |
+| 8 | Search performance | **Embedding cache + BM25 fast path** | <500ms for simple Q&A, full hybrid for complex |
 
 ---
 
@@ -13,9 +29,9 @@ From Viktor, Piaz learns the UX: **join in 30 seconds, answer questions immediat
 ### Principles (from OpenClaw's "Shitty Coding Agent" philosophy)
 
 1. **Minimal > Complex** — simple while loop, not complex state machine
-2. **Files > Databases** — JSONL for sessions, Markdown for memory, DB only for multi-tenant
+2. **JSONL on R2 + Postgres** — sessions in JSONL (proven by OpenClaw), org data in Postgres
 3. **Single Process > Microservices** — one Node.js process, fewer failure modes
-4. **Copy-Paste > Abstraction** — duplicate if clearer, no premature shared packages
+4. **Build from scratch** — OpenClaw as reference, not fork. Cleanest codebase
 5. **Gateway owns everything** — no agent talks to Telegram directly
 
 ---
